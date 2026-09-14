@@ -398,6 +398,37 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, uint32_t UUID1
 	return true;
 }
 
+bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, ResetInfo_t const &resetInfo)
+{
+	deviceType_t newType = type;
+	if (!is_valid_device_id(device_id))
+	{
+		return false;
+	}
+
+#ifdef USE_THREAD_BASED
+	const std::lock_guard<std::mutex> lock(_mutex);
+#endif
+
+	if ((newType == deviceType_t::Both || newType == deviceType_t::None) && device_id_exist(device_id) == deviceType_t::None)
+		return false;
+
+	if (newType == deviceType_t::Both || newType == deviceType_t::None)
+		newType = device_id_exist(device_id);
+
+	if (newType == deviceType_t::Sensor)
+	{
+		_sensors[device_id].resetInfo = resetInfo;
+	}
+	else if (newType == deviceType_t::Source)
+	{
+		_sources[device_id].resetInfo = resetInfo;
+	}
+
+	update_last_seen(device_id, newType);
+	return true;
+}
+
 bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, FW_t fwVersion)
 {
 	deviceType_t newType = type;

@@ -15,6 +15,7 @@
 #include "Amfitrack_Sensor.h"
 #include "Amfitrack_Source.h"
 #include "Amfitrack_config.h"
+#include "Amfitrack_resetinfo.h"
 
 #include "lib_AmfiProt_API.hpp"
 
@@ -57,6 +58,10 @@ class AMFITRACK
 	bool setConfiguration(uint8_t DeviceID, uint32_t UID, lib_Generic_Parameter_Value_t parameter);
 	bool getConfiguration(uint8_t DeviceID, bool force_all = false);
 	ConfigDiscoveryState_t getConfigurationState(uint8_t DeviceID) const;
+
+	bool requestResetInfo(uint8_t DeviceID);
+	ResetInfoState_t getResetInfoState(uint8_t DeviceID) const;
+	bool getResetInfo(uint8_t DeviceID, ResetInfo_t *resetInfo) const;
 	//-----------------------------------------------------------------------------
 	// Old function will be deprecated
 	//-----------------------------------------------------------------------------

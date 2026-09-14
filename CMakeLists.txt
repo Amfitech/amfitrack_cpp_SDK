@@ -49,6 +49,8 @@ target_sources(${CMAKE_LIBRARY_NAME} PRIVATE
     src/Amfitrack_task.h
     src/Amfitrack_config.cpp
     src/Amfitrack_config.h
+    src/Amfitrack_resetinfo.cpp
+    src/Amfitrack_resetinfo.h
     src/Amfitrack_callbacks.cpp
     src/Amfitrack_callbacks.h
 

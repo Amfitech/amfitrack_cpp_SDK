@@ -91,6 +91,10 @@ typedef struct lib_AmfiProt_RebootDevice lib_AmfiProt_RebootDevice_t;
 typedef struct libAmfiProt_TunnelData libAmfiProt_TunnelData_t;
 typedef struct libAmfiProt_Invalid libAmfiProt_Invalid_t;
 
+typedef struct lib_AmfiProt_ResetInfoRequest lib_AmfiProt_ResetInfoRequest_t;
+typedef struct lib_AmfiProt_ResetInfoSummary lib_AmfiProt_ResetInfoSummary_t;
+typedef struct lib_AmfiProt_ResetInfoChunk lib_AmfiProt_ResetInfoChunk_t;
+
 typedef struct lib_AmfiProt_ProcedureSpecRequest lib_AmfiProt_ProcedureSpecRequest_t;
 typedef struct lib_AmfiProt_ProcedureSpec lib_AmfiProt_ProcedureSpec_t;
 typedef struct lib_AmfiProt_ProcedureRequest lib_AmfiProt_ProcedureRequest_t;
@@ -159,6 +163,9 @@ typedef enum
 	lib_AmfiProt_PayloadID_RequestFirmwareVersionPerID = 0x1C,
 	lib_AmfiProt_PayloadID_ReplyFirmwareVersionPerID = 0x1D,
 
+	lib_AmfiProt_PayloadID_RequestResetInfo = 0x1E,
+	lib_AmfiProt_PayloadID_ReplyResetInfo = 0x1F,
+
 	lib_AmfiProt_PayloadID_DebugOutput = 0x20,
 
 	lib_AmfiProt_PayloadID_Reboot = 0x21,
@@ -201,6 +208,22 @@ typedef enum
 	lib_AmfiProt_ConfigCategory_Force_All = 0xFE,
 	lib_AmfiProt_ConfigCategory_All = 0xFF,
 } lib_AmfiProt_ConfigCategoryNames_t;
+
+typedef enum
+{
+	lib_AmfiProt_ResetInfoField_Summary = 0x00,
+	lib_AmfiProt_ResetInfoField_File    = 0x01,
+	lib_AmfiProt_ResetInfoField_Func    = 0x02,
+	lib_AmfiProt_ResetInfoField_Expr    = 0x03,
+	lib_AmfiProt_ResetInfoField_Last,
+} lib_AmfiProt_ResetInfoField_t;
+
+typedef enum
+{
+	lib_AmfiProt_ResetInfoRecord_None      = 0x00,
+	lib_AmfiProt_ResetInfoRecord_HardFault = 0x01,
+	lib_AmfiProt_ResetInfoRecord_Assert    = 0x02,
+} lib_AmfiProt_ResetInfoRecord_t;
 
 class lib_AmfiProt
 {
@@ -255,6 +278,8 @@ class lib_AmfiProt
 	virtual void libAmfiProt_handle_ResetParameter(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
 	virtual void libAmfiProt_handle_RequestFirmwareVersionPerID(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
 	virtual void libAmfiProt_handle_ReplyFirmwareVersionPerID(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
+	virtual void libAmfiProt_handle_RequestResetInfo(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
+	virtual void libAmfiProt_handle_ReplyResetInfo(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
 	virtual void libAmfiProt_handle_AlternativeProcessing(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
 
 	virtual void libAmfiProt_ReplyInvalid(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle) = 0;
@@ -368,6 +393,44 @@ __PACKED_STRUCT lib_AmfiProt_DeviceName
 }
 __packed;
 static_assert(sizeof(struct lib_AmfiProt_DeviceName) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_DeviceName larger than max payload size");
+
+__PACKED_STRUCT lib_AmfiProt_ResetInfoRequest
+{
+	uint8_t payloadID;
+	uint8_t field;              // lib_AmfiProt_ResetInfoField_t
+	uint8_t chunkIndex;         // Ignored for the summary, but always present so the request is fixed size
+}
+__packed;
+static_assert(sizeof(struct lib_AmfiProt_ResetInfoRequest) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_ResetInfoRequest larger than max payload size");
+
+__PACKED_STRUCT lib_AmfiProt_ResetInfoSummary
+{
+	uint8_t payloadID;
+	uint8_t field;              // Always lib_AmfiProt_ResetInfoField_Summary, so the host can demux the two reply shapes sharing one payload ID
+	uint8_t resetReason;
+	uint8_t recordType;         // lib_AmfiProt_ResetInfoRecord_t
+	uint32_t rsr;               // Raw reset status register
+	uint32_t cfsr;              // Hard fault only
+	uint32_t xFAR;              // Hard fault only; MMFAR or BFAR, CFSR's MMARVALID/BFARVALID says which
+	uint32_t pc;
+	uint32_t lr;                // Hard fault only
+	uint32_t psr;               // Hard fault only
+	uint32_t assertLine;        // Assert only
+	uint8_t chunkCount[lib_AmfiProt_ResetInfoField_Last - 1];   // File, func, expr - 0 when that string is unavailable
+}
+__packed;
+static_assert(sizeof(struct lib_AmfiProt_ResetInfoSummary) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_ResetInfoSummary larger than max payload size");
+
+__PACKED_STRUCT lib_AmfiProt_ResetInfoChunk
+{
+	uint8_t payloadID;
+	uint8_t field;
+	uint8_t chunkIndex;
+	uint8_t chunkCount;         // Repeated so a host that lost the summary can still reassemble
+	char text[AmfiProtMaxPayloadLength - 4*sizeof(uint8_t)];    // Not nul terminated - the frame length carries the count, so a split string concatenates cleanly
+}
+__packed;
+static_assert(sizeof(struct lib_AmfiProt_ResetInfoChunk) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_ResetInfoChunk larger than max payload size");
 
 __PACKED_STRUCT lib_AmfiProt_ConfigNameRequest
 {

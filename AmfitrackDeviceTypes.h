@@ -16,6 +16,19 @@
 #define MAX_NAME_LENGTH 64
 #endif
 
+// The device bounds each retained string with strnlen(..., 128); +1 for the
+// terminator the wire format does not carry.
+#ifndef AMFITRACK_RESET_INFO_STRING_LENGTH
+#define AMFITRACK_RESET_INFO_STRING_LENGTH 129
+#endif
+
+// Chunks accepted per string field; the chunk payload is 50 bytes, so 128
+// bounded chars never need more than three. Not a field count - see
+// kResetInfoFieldCount in Amfitrack_resetinfo.h.
+#ifndef AMFITRACK_RESET_INFO_MAX_CHUNKS
+#define AMFITRACK_RESET_INFO_MAX_CHUNKS 3
+#endif
+
 //-----------------------------------------------------------------------------
 // General enum types
 //-----------------------------------------------------------------------------
@@ -81,6 +94,29 @@ typedef struct
 	uint32_t SubVersion;
 	uint32_t Frequency;
 } HW_t;
+
+//-----------------------------------------------------------------------------
+// Reset info
+//-----------------------------------------------------------------------------
+// Fault record retained across reboot, assembled from the paged ResetInfo
+// exchange. Registers are stored raw - the firmware deliberately does not
+// interpret them; see resetinfo_cfsr_to_string() for the host-side decode.
+typedef struct
+{
+	uint8_t resetReason;  /**< Device-specific decoded reason; not redundant with rsr */
+	uint8_t recordType;   /**< lib_AmfiProt_ResetInfoRecord_t */
+	uint32_t rsr;         /**< Raw RCC->RSR */
+	uint32_t cfsr;        /**< Hard fault only */
+	uint32_t xFAR;        /**< Hard fault only; MMARVALID/BFARVALID says which register */
+	uint32_t pc;          /**< Hard fault and assert */
+	uint32_t lr;          /**< Hard fault only */
+	uint32_t psr;         /**< Hard fault only */
+	uint32_t assertLine;  /**< Assert only */
+	char file[AMFITRACK_RESET_INFO_STRING_LENGTH];  /**< Assert only; empty when absent */
+	char func[AMFITRACK_RESET_INFO_STRING_LENGTH];
+	char expr[AMFITRACK_RESET_INFO_STRING_LENGTH];
+	bool valid;           /**< False until a summary has been received */
+} ResetInfo_t;
 
 //-----------------------------------------------------------------------------
 // Configuration

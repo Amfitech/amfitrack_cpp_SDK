@@ -45,6 +45,7 @@
 // Functions
 //-----------------------------------------------------------------------------
 lib_AmfiProt::lib_AmfiProt()
+	: deviceID(0)
 {
 }
 
@@ -559,6 +560,30 @@ void lib_AmfiProt::lib_AmfiProt_ProcessFrame(void *handle, lib_AmfiProt_Frame_t 
 						if (frame->header.length == sizeof(lib_AmfiProt_ConfigCategoryCount_t))
 						{
 							this->libAmfiProt_handle_CategoryCount(handle, frame, routing_handle);
+						}
+						else
+						{
+							this->libAmfiProt_ReplyInvalid(handle, frame, routing_handle);
+						}
+					}
+					break;
+					case lib_AmfiProt_PayloadID_RequestResetInfo:
+					{
+						if (frame->header.length == sizeof(lib_AmfiProt_ResetInfoRequest_t))
+						{
+							this->libAmfiProt_handle_RequestResetInfo(handle, frame, routing_handle);
+						}
+						else
+						{
+							this->libAmfiProt_ReplyInvalid(handle, frame, routing_handle);
+						}
+					}
+					break;
+					case lib_AmfiProt_PayloadID_ReplyResetInfo:
+					{
+						if (frame->header.length <= sizeof(lib_AmfiProt_ResetInfoChunk_t))
+						{
+							this->libAmfiProt_handle_ReplyResetInfo(handle, frame, routing_handle);
 						}
 						else
 						{

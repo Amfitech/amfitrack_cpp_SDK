@@ -50,6 +50,7 @@ void AMFITRACK_Source::reset()
 	std::memset(&RF_Version, 0, sizeof(RF_Version));
 	std::memset(&HW_Version, 0, sizeof(HW_Version));
 	config = DeviceConfig_t{};
+	std::memset(&resetInfo, 0, sizeof(resetInfo));
 	active = false;
 	hub_ID = 0;
 	_dev_handle = nullptr;
