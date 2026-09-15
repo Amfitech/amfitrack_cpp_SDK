@@ -111,6 +111,8 @@ class AMFITRACK_ResetInfo
 
 	bool set(uint8_t device_id, lib_AmfiProt_ResetInfoSummary_t const &summary);
 	bool set(uint8_t device_id, lib_AmfiProt_ResetInfoChunk_t const &chunk, uint8_t payload_length);
+	
+	void print_reset_info(uint8_t device_id) const;
 
   private:
 	AMFITRACK_ResetInfo() = default;

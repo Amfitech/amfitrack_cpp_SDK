@@ -481,6 +481,59 @@ bool AMFITRACK_ResetInfo::set(uint8_t device_id, lib_AmfiProt_ResetInfoChunk_t c
 	return true;
 }
 
+void AMFITRACK_ResetInfo::print_reset_info(uint8_t device_id) const
+{
+	ResetInfo_t info;
+
+	if (!get(device_id, &info))
+	{
+		LOG_W("print_reset_info: no reset info stored for device_id=%u", device_id);
+		return;
+	}
+
+	LOG_I("--- ResetInfo: device %u ---------------------------", device_id);
+	LOG_I("  reset reason : %s (%u)", resetinfo_reset_reason_name(info.resetReason), info.resetReason);
+	LOG_I("  RSR          : 0x%08X", info.rsr);
+	LOG_I("  record       : %s", resetinfo_record_type_name(info.recordType));
+
+	switch (info.recordType)
+	{
+		case lib_AmfiProt_ResetInfoRecord_Assert:
+			LOG_I("  assert       : %s:%u", info.file, info.assertLine);
+			LOG_I("  in function  : %s()", info.func);
+			LOG_I("  expression   : %s", info.expr);
+			LOG_I("  PC           : 0x%08X", info.pc);
+			break;
+
+		case lib_AmfiProt_ResetInfoRecord_HardFault:
+		{
+			char flags[256];
+			char xfar[32];
+
+			resetinfo_cfsr_to_string(info.cfsr, flags, sizeof(flags));
+			resetinfo_fault_address_to_string(info.xFAR, info.cfsr, xfar, sizeof(xfar));
+
+			const uint32_t exception = info.psr & 0x1FFu;
+
+			LOG_I("  fault        : %s", flags);
+			LOG_I("  CFSR         : 0x%08X", info.cfsr);
+			LOG_I("  PC / LR      : 0x%08X / 0x%08X", info.pc, info.lr);
+			LOG_I("  xFAR         : %s", xfar);
+			LOG_I("  PSR          : 0x%08X (%s, T-bit %u)",
+				  info.psr,
+				  (exception == 0u) ? "thread mode" : "in exception",
+				  (unsigned)((info.psr >> 24) & 1u));
+			break;
+		}
+
+		default:
+			LOG_I("  (no fault record retained)");
+			break;
+	}
+
+	LOG_I("---------------------------------------------------");
+}
+
 bool AMFITRACK_ResetInfo::request_current()
 {
 	if ((_state == RESET_INFO_IDLE) || (_state == RESET_INFO_DONE) ||
