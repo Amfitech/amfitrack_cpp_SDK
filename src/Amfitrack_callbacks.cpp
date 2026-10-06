@@ -645,6 +645,13 @@ void AmfiProt_API::libAmfiProt_handle_ReplyResetInfo(void *handle, lib_AmfiProt_
 		case lib_AmfiProt_ResetInfoField_Func:
 		case lib_AmfiProt_ResetInfoField_Expr:
 		{
+			if (frame->header.length > sizeof(lib_AmfiProt_ResetInfoChunk_t))
+			{
+				LOG_W("ReplyResetInfo: device %u chunk is %u byte(s), max %u",
+					  _deviceID, frame->header.length, (unsigned)sizeof(lib_AmfiProt_ResetInfoChunk_t));
+				return;
+			}
+
 			// The last chunk of a field is short, so copy the frame length rather
 			// than the struct size, and carry the length through: text is not
 			// NUL terminated on the wire.

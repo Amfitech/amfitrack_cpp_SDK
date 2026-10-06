@@ -223,6 +223,7 @@ typedef enum
 	lib_AmfiProt_ResetInfoRecord_None      = 0x00,
 	lib_AmfiProt_ResetInfoRecord_HardFault = 0x01,
 	lib_AmfiProt_ResetInfoRecord_Assert    = 0x02,
+	lib_AmfiProt_ResetInfoRecord_Reset     = 0x03,  // Watchdog, brownout or illegal low-power entry
 } lib_AmfiProt_ResetInfoRecord_t;
 
 class lib_AmfiProt
@@ -398,7 +399,8 @@ __PACKED_STRUCT lib_AmfiProt_ResetInfoRequest
 {
 	uint8_t payloadID;
 	uint8_t field;              // lib_AmfiProt_ResetInfoField_t
-	uint8_t chunkIndex;         // Ignored for the summary, but always present so the request is fixed size
+	uint8_t chunkIndex;         // String fields only; ignored for the summary, but always present so the request is fixed size
+	uint8_t recordIndex;        // 0 = newest record, higher indices progressively older
 }
 __packed;
 static_assert(sizeof(struct lib_AmfiProt_ResetInfoRequest) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_ResetInfoRequest larger than max payload size");
@@ -407,9 +409,8 @@ __PACKED_STRUCT lib_AmfiProt_ResetInfoSummary
 {
 	uint8_t payloadID;
 	uint8_t field;              // Always lib_AmfiProt_ResetInfoField_Summary, so the host can demux the two reply shapes sharing one payload ID
-	uint8_t resetReason;
+	uint8_t resetReason;        // Decoded from this record's own reset status
 	uint8_t recordType;         // lib_AmfiProt_ResetInfoRecord_t
-	uint32_t rsr;               // Raw reset status register
 	uint32_t cfsr;              // Hard fault only
 	uint32_t xFAR;              // Hard fault only; MMFAR or BFAR, CFSR's MMARVALID/BFARVALID says which
 	uint32_t pc;
@@ -417,6 +418,11 @@ __PACKED_STRUCT lib_AmfiProt_ResetInfoSummary
 	uint32_t psr;               // Hard fault only
 	uint32_t assertLine;        // Assert only
 	uint8_t chunkCount[lib_AmfiProt_ResetInfoField_Last - 1];   // File, func, expr - 0 when that string is unavailable
+	uint8_t recordIndex;        // Echoed from the request
+	uint8_t recordCount;        // Records available to index, saturating at 255
+	uint32_t fw_mmp;            // Build that wrote this record: major << 16 | minor << 8 | patch
+	uint32_t fw_build;          // With fw_mmp, names the .elf that resolves pc and stringAddr
+	uint32_t stringAddr[lib_AmfiProt_ResetInfoField_Last - 1];  // file, func, expr pointer values; assert only, 0 otherwise
 }
 __packed;
 static_assert(sizeof(struct lib_AmfiProt_ResetInfoSummary) <= AmfiProtMaxPayloadLength, "lib_AmfiProt_ResetInfoSummary larger than max payload size");
@@ -426,7 +432,7 @@ __PACKED_STRUCT lib_AmfiProt_ResetInfoChunk
 	uint8_t payloadID;
 	uint8_t field;
 	uint8_t chunkIndex;
-	uint8_t chunkCount;         // Repeated so a host that lost the summary can still reassemble
+	uint8_t chunkCount;         // Repeated so a host that lost the summary can still reassemble; carries no recordIndex - the reply's packet number mirrors the request's
 	char text[AmfiProtMaxPayloadLength - 4*sizeof(uint8_t)];    // Not nul terminated - the frame length carries the count, so a split string concatenates cleanly
 }
 __packed;

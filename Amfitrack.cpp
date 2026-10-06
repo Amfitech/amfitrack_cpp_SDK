@@ -215,9 +215,9 @@ ConfigDiscoveryState_t AMFITRACK::getConfigurationState(uint8_t DeviceID) const
 	return AMFITRACK_Config::getInstance().state(DeviceID);
 }
 
-bool AMFITRACK::requestResetInfo(uint8_t DeviceID)
+bool AMFITRACK::requestResetInfo(uint8_t DeviceID, uint8_t RecordCount)
 {
-	return AMFITRACK_ResetInfo::getInstance().start(DeviceID);
+	return AMFITRACK_ResetInfo::getInstance().start(DeviceID, RecordCount);
 }
 
 ResetInfoState_t AMFITRACK::getResetInfoState(uint8_t DeviceID) const
@@ -225,9 +225,14 @@ ResetInfoState_t AMFITRACK::getResetInfoState(uint8_t DeviceID) const
 	return AMFITRACK_ResetInfo::getInstance().state(DeviceID);
 }
 
-bool AMFITRACK::getResetInfo(uint8_t DeviceID, ResetInfo_t *resetInfo) const
+bool AMFITRACK::getResetInfoLog(uint8_t DeviceID, ResetInfoLog_t *resetInfoLog) const
 {
-	return AMFITRACK_ResetInfo::getInstance().get(DeviceID, resetInfo);
+	return AMFITRACK_ResetInfo::getInstance().get(DeviceID, resetInfoLog);
+}
+
+bool AMFITRACK::getResetInfo(uint8_t DeviceID, uint8_t RecordIndex, ResetInfo_t *resetInfo) const
+{
+	return AMFITRACK_ResetInfo::getInstance().get(DeviceID, RecordIndex, resetInfo);
 }
 
 //-----------------------------------------------------------------------------

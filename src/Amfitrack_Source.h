@@ -50,7 +50,7 @@ class AMFITRACK_Source
 	RF_t RF_Version;
 	HW_t HW_Version;
 	DeviceConfig_t config;
-	ResetInfo_t resetInfo;
+	ResetInfoLog_t resetInfo;
 
 	bool active;
 	uint8_t hub_ID;

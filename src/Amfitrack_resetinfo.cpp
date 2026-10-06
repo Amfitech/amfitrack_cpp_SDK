@@ -196,6 +196,17 @@ std::size_t resetinfo_append_text(char *dest, std::size_t dest_size, std::size_t
 	return offset + copy_length;
 }
 
+// Record 0 always answers, even with nothing logged - it comes back with
+// recordType None. A device that never faulted reports available == 0, so
+// clamping straight to it would walk nothing at all.
+std::size_t resetinfo_records_to_read(std::size_t requested, std::size_t available)
+{
+	const std::size_t wanted = std::max<std::size_t>(requested, 1U);
+	const std::size_t reachable = std::min(std::max<std::size_t>(available, 1U), kResetInfoMaxRecords);
+
+	return std::min(wanted, reachable);
+}
+
 // Mirrors drv_BootDiagn_reset_reason_t in the device firmware. Unlike
 // recordType there is no wire enum to derive this from, so the table is a hand
 // copy and must be kept in step with the firmware header.
@@ -225,6 +236,8 @@ char const *resetinfo_record_type_name(uint8_t record_type)
 			return "hardfault";
 		case lib_AmfiProt_ResetInfoRecord_Assert:
 			return "assert";
+		case lib_AmfiProt_ResetInfoRecord_Reset:
+			return "reset";
 		default:
 			return "unknown";
 	}
@@ -308,13 +321,31 @@ std::size_t resetinfo_fault_address_to_string(uint32_t address, uint32_t cfsr, c
 	return (written < 0) ? 0U : std::strlen(out);
 }
 
+// pc and stringAddr only resolve against the image that wrote the record, so the
+// build is part of reading one.
+std::size_t resetinfo_firmware_to_string(uint32_t fw_mmp, uint32_t fw_build, char *out, std::size_t size)
+{
+	if ((out == nullptr) || (size == 0U))
+	{
+		return 0U;
+	}
+
+	const int written = std::snprintf(out, size, "%u.%u.%u build %u",
+									  (unsigned)((fw_mmp >> 16) & 0xFFu),
+									  (unsigned)((fw_mmp >> 8) & 0xFFu),
+									  (unsigned)(fw_mmp & 0xFFu),
+									  (unsigned)fw_build);
+
+	return (written < 0) ? 0U : std::strlen(out);
+}
+
 AMFITRACK_ResetInfo &AMFITRACK_ResetInfo::getInstance()
 {
 	static AMFITRACK_ResetInfo instance;
 	return instance;
 }
 
-bool AMFITRACK_ResetInfo::start(uint8_t device_id)
+bool AMFITRACK_ResetInfo::start(uint8_t device_id, uint8_t record_count)
 {
 	if (!AMFITRACK_Devices::is_valid_device_id(device_id))
 	{
@@ -332,14 +363,21 @@ bool AMFITRACK_ResetInfo::start(uint8_t device_id)
 	const std::lock_guard<std::mutex> lock(_mutex);
 #endif
 
-	LOG_I("start: requesting reset info for device_id=%u", device_id);
+	// 0 and 1 both mean the newest record: index 0 always answers, so there is no
+	// "fetch nothing" case to express.
+	_requested = (record_count == 0U) ? 1U : record_count;
+
+	LOG_I("start: requesting %u reset info record(s) for device_id=%u", _requested, device_id);
 
 	_device_id = device_id;
 	_state = RESET_INFO_SUMMARY;
+	_record_index = 0U;
+	_record_count = 0U;
 	_chunk_index = 0U;
 	std::memset(_chunk_count, 0, sizeof(_chunk_count));
 	std::memset(_length, 0, sizeof(_length));
 	_info = ResetInfo_t{};
+	_records.clear();
 	_attempts = 0U;
 
 	return request_current();
@@ -368,7 +406,7 @@ ResetInfoState_t AMFITRACK_ResetInfo::state(uint8_t device_id) const
 	return _state;
 }
 
-bool AMFITRACK_ResetInfo::get(uint8_t device_id, ResetInfo_t *out) const
+bool AMFITRACK_ResetInfo::get(uint8_t device_id, ResetInfoLog_t *out) const
 {
 	if (out == nullptr)
 	{
@@ -379,14 +417,41 @@ bool AMFITRACK_ResetInfo::get(uint8_t device_id, ResetInfo_t *out) const
 	if (AMFITRACK_Devices::getInstance().get_sensor_by_id(device_id, &sensor))
 	{
 		*out = sensor.resetInfo;
-		return out->valid;
+		return !out->records.empty();
 	}
 
 	AMFITRACK_Source source;
 	if (AMFITRACK_Devices::getInstance().get_source_by_id(device_id, &source))
 	{
 		*out = source.resetInfo;
-		return out->valid;
+		return !out->records.empty();
+	}
+
+	return false;
+}
+
+bool AMFITRACK_ResetInfo::get(uint8_t device_id, uint8_t record_index, ResetInfo_t *out) const
+{
+	if (out == nullptr)
+	{
+		return false;
+	}
+
+	ResetInfoLog_t log;
+	if (!get(device_id, &log))
+	{
+		return false;
+	}
+
+	// A record the walk gave up on leaves a hole, so the index is searched for
+	// rather than used as a subscript.
+	for (std::size_t i = 0U; i < log.records.size(); i++)
+	{
+		if (log.records[i].recordIndex == record_index)
+		{
+			*out = log.records[i];
+			return out->valid;
+		}
 	}
 
 	return false;
@@ -403,20 +468,33 @@ bool AMFITRACK_ResetInfo::set(uint8_t device_id, lib_AmfiProt_ResetInfoSummary_t
 		return false;
 	}
 
+	// A reply that crossed with a resend answers an index the walk has already
+	// moved past; taking it would file the wrong record under the current index.
+	if (summary.recordIndex != _record_index)
+	{
+		LOG_W("set summary: device %u answered record %u while fetching record %u",
+			  device_id, summary.recordIndex, _record_index);
+		return false;
+	}
+
 	_info = ResetInfo_t{};
+	_info.recordIndex = summary.recordIndex;
+	_info.recordCount = summary.recordCount;
 	_info.resetReason = summary.resetReason;
 	_info.recordType = summary.recordType;
-	_info.rsr = summary.rsr;
 	_info.cfsr = summary.cfsr;
 	_info.xFAR = summary.xFAR;
 	_info.pc = summary.pc;
 	_info.lr = summary.lr;
 	_info.psr = summary.psr;
 	_info.assertLine = summary.assertLine;
+	_info.fw_mmp = summary.fw_mmp;
+	_info.fw_build = summary.fw_build;
 	_info.valid = true;
 
 	for (std::size_t i = 0U; i < kResetInfoFieldCount; i++)
 	{
+		_info.stringAddr[i] = summary.stringAddr[i];
 		_chunk_count[i] = summary.chunkCount[i];
 		_length[i] = 0U;
 
@@ -428,8 +506,15 @@ bool AMFITRACK_ResetInfo::set(uint8_t device_id, lib_AmfiProt_ResetInfoSummary_t
 		}
 	}
 
-	LOG_I("set summary: device_id=%u, reason=%u, record=%u, rsr=0x%08X",
-		  device_id, _info.resetReason, _info.recordType, _info.rsr);
+	// The count is read once, from record 0: a later record answers with whatever
+	// the log held when it was written, which need not be the current total.
+	if (_record_index == 0U)
+	{
+		_record_count = summary.recordCount;
+	}
+
+	LOG_I("set summary: device_id=%u, record=%u/%u, reason=%u, type=%u",
+		  device_id, _info.recordIndex, _info.recordCount, _info.resetReason, _info.recordType);
 
 	advance_after_summary();
 	request_current();
@@ -455,6 +540,8 @@ bool AMFITRACK_ResetInfo::set(uint8_t device_id, lib_AmfiProt_ResetInfoChunk_t c
 		return false;
 	}
 
+	// A chunk carries no recordIndex, so the field and index checks are all that
+	// separate it from a late reply belonging to the previous record.
 	if (!resetinfo_chunk_is_expected(chunk.chunkIndex, chunk.chunkCount, _chunk_index))
 	{
 		LOG_W("set chunk: device %u sent index=%u count=%u, expected index=%u",
@@ -483,55 +570,86 @@ bool AMFITRACK_ResetInfo::set(uint8_t device_id, lib_AmfiProt_ResetInfoChunk_t c
 
 void AMFITRACK_ResetInfo::print_reset_info(uint8_t device_id) const
 {
-	ResetInfo_t info;
+	ResetInfoLog_t log;
 
-	if (!get(device_id, &info))
+	if (!get(device_id, &log))
 	{
 		LOG_W("print_reset_info: no reset info stored for device_id=%u", device_id);
 		return;
 	}
 
-	LOG_I("--- ResetInfo: device %u ---------------------------", device_id);
-	LOG_I("  reset reason : %s (%u)", resetinfo_reset_reason_name(info.resetReason), info.resetReason);
-	LOG_I("  RSR          : 0x%08X", info.rsr);
-	LOG_I("  record       : %s", resetinfo_record_type_name(info.recordType));
+	LOG_I("=== ResetInfo: device %u, %u record(s) logged, %u read ===",
+		  device_id, log.count, (unsigned)log.records.size());
 
-	switch (info.recordType)
+	for (std::size_t r = 0U; r < log.records.size(); r++)
 	{
-		case lib_AmfiProt_ResetInfoRecord_Assert:
-			LOG_I("  assert       : %s:%u", info.file, info.assertLine);
-			LOG_I("  in function  : %s()", info.func);
-			LOG_I("  expression   : %s", info.expr);
-			LOG_I("  PC           : 0x%08X", info.pc);
-			break;
+		ResetInfo_t const &info = log.records[r];
+		char firmware[48];
 
-		case lib_AmfiProt_ResetInfoRecord_HardFault:
+		resetinfo_firmware_to_string(info.fw_mmp, info.fw_build, firmware, sizeof(firmware));
+
+		LOG_I("--- record %u (%s) --------------------------------",
+			  info.recordIndex, (info.recordIndex == 0U) ? "newest" : "older");
+		LOG_I("  record       : %s", resetinfo_record_type_name(info.recordType));
+		LOG_I("  written by   : %s", firmware);
+
+		switch (info.recordType)
 		{
-			char flags[256];
-			char xfar[32];
+			case lib_AmfiProt_ResetInfoRecord_Assert:
+				LOG_I("  assert line  : %u", info.assertLine);
+				LOG_I("  PC           : 0x%08X", info.pc);
 
-			resetinfo_cfsr_to_string(info.cfsr, flags, sizeof(flags));
-			resetinfo_fault_address_to_string(info.xFAR, info.cfsr, xfar, sizeof(xfar));
+				// The device only serves strings for records its own build wrote;
+				// for anything older the pointers are all the host gets.
+				if (info.file[0] != '\0')
+				{
+					LOG_I("  assert       : %s:%u", info.file, info.assertLine);
+					LOG_I("  in function  : %s()", info.func);
+					LOG_I("  expression   : %s", info.expr);
+				}
+				else
+				{
+					LOG_I("  strings      : not served - record predates the running build");
+					LOG_I("  file/func/expr: 0x%08X / 0x%08X / 0x%08X (objdump the %s image)",
+						  info.stringAddr[0], info.stringAddr[1], info.stringAddr[2], firmware);
+				}
+				break;
 
-			const uint32_t exception = info.psr & 0x1FFu;
+			case lib_AmfiProt_ResetInfoRecord_HardFault:
+			{
+				char flags[256];
+				char xfar[32];
 
-			LOG_I("  fault        : %s", flags);
-			LOG_I("  CFSR         : 0x%08X", info.cfsr);
-			LOG_I("  PC / LR      : 0x%08X / 0x%08X", info.pc, info.lr);
-			LOG_I("  xFAR         : %s", xfar);
-			LOG_I("  PSR          : 0x%08X (%s, T-bit %u)",
-				  info.psr,
-				  (exception == 0u) ? "thread mode" : "in exception",
-				  (unsigned)((info.psr >> 24) & 1u));
-			break;
+				resetinfo_cfsr_to_string(info.cfsr, flags, sizeof(flags));
+				resetinfo_fault_address_to_string(info.xFAR, info.cfsr, xfar, sizeof(xfar));
+
+				const uint32_t exception = info.psr & 0x1FFu;
+
+				LOG_I("  fault        : %s", flags);
+				LOG_I("  CFSR         : 0x%08X", info.cfsr);
+				LOG_I("  PC / LR      : 0x%08X / 0x%08X", info.pc, info.lr);
+				LOG_I("  xFAR         : %s", xfar);
+				LOG_I("  PSR          : 0x%08X (%s, T-bit %u)",
+					  info.psr,
+					  (exception == 0u) ? "thread mode" : "in exception",
+					  (unsigned)((info.psr >> 24) & 1u));
+				break;
+			}
+
+			case lib_AmfiProt_ResetInfoRecord_Reset:
+				// Nothing ran to capture fault context - the reason is the record.
+				LOG_I("  reset reason : %s (%u)", resetinfo_reset_reason_name(info.resetReason), info.resetReason);
+				LOG_I("  (device did not cause this reset; identical repeats stop being logged after 8)");
+				break;
+
+			default:
+				LOG_I("  boot reason  : %s (%u)", resetinfo_reset_reason_name(info.resetReason), info.resetReason);
+				LOG_I("  (no fault record retained - the reason above is this boot's, not a logged one)");
+				break;
 		}
-
-		default:
-			LOG_I("  (no fault record retained)");
-			break;
 	}
 
-	LOG_I("---------------------------------------------------");
+	LOG_I("===================================================");
 }
 
 bool AMFITRACK_ResetInfo::request_current()
@@ -563,14 +681,14 @@ bool AMFITRACK_ResetInfo::request_current()
 
 		if (_attempts >= kResetInfoMaxAttempts)
 		{
-			LOG_W("request_current: device %u gave no reply after %u attempts (state=%d)",
-				  _device_id, _attempts, (int)_state);
-			fail();
+			LOG_W("request_current: device %u gave no reply for record %u after %u attempts (state=%d)",
+				  _device_id, _record_index, _attempts, (int)_state);
+			give_up_on_record();
 			return false;
 		}
 
-		LOG_W("request_current: no reply within %ums, resending (state=%d, attempt=%u)",
-			  kResetInfoReplyTimeoutMs, (int)_state, _attempts);
+		LOG_W("request_current: no reply within %ums, resending (record=%u, state=%d, attempt=%u)",
+			  kResetInfoReplyTimeoutMs, _record_index, (int)_state, _attempts);
 	}
 
 	if (_state == RESET_INFO_SUMMARY)
@@ -583,12 +701,13 @@ bool AMFITRACK_ResetInfo::request_current()
 
 bool AMFITRACK_ResetInfo::request_summary()
 {
-	LOG_D("request_summary: device_id=%u", _device_id);
+	LOG_D("request_summary: device_id=%u, record=%u", _device_id, _record_index);
 
 	lib_AmfiProt_ResetInfoRequest_t payload = {};
 	payload.payloadID = static_cast<uint8_t>(lib_AmfiProt_PayloadID_RequestResetInfo);
 	payload.field = static_cast<uint8_t>(lib_AmfiProt_ResetInfoField_Summary);
 	payload.chunkIndex = 0U;
+	payload.recordIndex = _record_index;
 
 	const bool queued = AmfiProt_API::getInstance().queue_frame(&payload, sizeof(payload), libAmfiProt_PayloadType_Common, lib_AmfiProt_packetType_NoAck, _device_id);
 	if (!queued)
@@ -602,12 +721,14 @@ bool AMFITRACK_ResetInfo::request_summary()
 
 bool AMFITRACK_ResetInfo::request_chunk()
 {
-	LOG_D("request_chunk: device_id=%u, field=%u, index=%u", _device_id, wire_field_for_state(_state), _chunk_index);
+	LOG_D("request_chunk: device_id=%u, record=%u, field=%u, index=%u",
+		  _device_id, _record_index, wire_field_for_state(_state), _chunk_index);
 
 	lib_AmfiProt_ResetInfoRequest_t payload = {};
 	payload.payloadID = static_cast<uint8_t>(lib_AmfiProt_PayloadID_RequestResetInfo);
 	payload.field = wire_field_for_state(_state);
 	payload.chunkIndex = _chunk_index;
+	payload.recordIndex = _record_index;
 
 	const bool queued = AmfiProt_API::getInstance().queue_frame(&payload, sizeof(payload), libAmfiProt_PayloadType_Common, lib_AmfiProt_packetType_NoAck, _device_id);
 	if (!queued)
@@ -635,7 +756,7 @@ bool AMFITRACK_ResetInfo::is_active(uint8_t device_id, ResetInfoState_t expected
 void AMFITRACK_ResetInfo::advance_after_summary()
 {
 	// A hard fault carries no strings, and neither does a normal reboot:
-	// chunkCount is all zero and the exchange is one round trip.
+	// chunkCount is all zero and the record is one round trip.
 	_state = RESET_INFO_FILE;
 	_chunk_index = 0U;
 	_attempts = 0U;
@@ -652,7 +773,7 @@ void AMFITRACK_ResetInfo::advance_field()
 	std::size_t index = 0U;
 	if (!field_index_for_state(_state, &index))
 	{
-		finish();
+		finish_record();
 		return;
 	}
 
@@ -667,28 +788,97 @@ void AMFITRACK_ResetInfo::advance_field()
 		}
 	}
 
-	finish();
+	finish_record();
+}
+
+std::size_t AMFITRACK_ResetInfo::records_to_read() const
+{
+	return resetinfo_records_to_read(_requested, _record_count);
+}
+
+void AMFITRACK_ResetInfo::finish_record()
+{
+	if (_info.valid)
+	{
+		_records.push_back(_info);
+	}
+
+	const std::size_t next = static_cast<std::size_t>(_record_index) + 1U;
+
+	if (next >= records_to_read())
+	{
+		finish();
+		return;
+	}
+
+	_record_index = static_cast<uint8_t>(next);
+	_state = RESET_INFO_SUMMARY;
+	_chunk_index = 0U;
+	std::memset(_chunk_count, 0, sizeof(_chunk_count));
+	std::memset(_length, 0, sizeof(_length));
+	_info = ResetInfo_t{};
+	_attempts = 0U;
+}
+
+// A record that will not read is not the end of the log: it was counted as
+// intact at startup and has since gone marginal, so the walk continues at the
+// next index. Only record 0 failing ends the exchange - without its recordCount
+// there is nothing to walk, and that is also how firmware without ResetInfo
+// support presents itself, since an error reply cannot be attributed.
+void AMFITRACK_ResetInfo::give_up_on_record()
+{
+	if ((_state == RESET_INFO_SUMMARY) && (_record_index == 0U))
+	{
+		fail();
+		return;
+	}
+
+	if (_state == RESET_INFO_SUMMARY)
+	{
+		LOG_W("give_up_on_record: device %u record %u unreadable, continuing at %u",
+			  _device_id, _record_index, _record_index + 1U);
+		_info = ResetInfo_t{};
+	}
+	else
+	{
+		// The summary is the diagnosis; a string that stalled leaves the record
+		// worth keeping, truncated.
+		LOG_W("give_up_on_record: device %u record %u strings incomplete, keeping the summary",
+			  _device_id, _record_index);
+	}
+
+	finish_record();
+}
+
+void AMFITRACK_ResetInfo::store()
+{
+	ResetInfoLog_t log;
+	log.count = _record_count;
+	log.records = _records;
+
+	if (!AMFITRACK_Devices::getInstance().set(_device_id, AMFITRACK_Devices::deviceType_t::Both, log))
+	{
+		LOG_E("store: failed to store reset info for device_id=%u", _device_id);
+	}
 }
 
 void AMFITRACK_ResetInfo::finish()
 {
 	_state = RESET_INFO_DONE;
+	store();
 
-	if (!AMFITRACK_Devices::getInstance().set(_device_id, AMFITRACK_Devices::deviceType_t::Both, _info))
-	{
-		LOG_E("finish: failed to store reset info for device_id=%u", _device_id);
-	}
-
-	LOG_I("finish: reset info complete for device_id=%u, record=%u", _device_id, _info.recordType);
+	LOG_I("finish: reset info complete for device_id=%u, %u record(s) read of %u logged",
+		  _device_id, (unsigned)_records.size(), _record_count);
 }
 
 void AMFITRACK_ResetInfo::fail()
 {
 	_state = RESET_INFO_FAILED;
 
-	// A summary that already arrived is worth keeping even if the strings did not.
-	if (_info.valid)
+	// Records that already arrived are worth keeping even though the walk did not
+	// get through the rest.
+	if (!_records.empty())
 	{
-		AMFITRACK_Devices::getInstance().set(_device_id, AMFITRACK_Devices::deviceType_t::Both, _info);
+		store();
 	}
 }

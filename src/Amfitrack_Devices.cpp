@@ -398,7 +398,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, uint32_t UUID1
 	return true;
 }
 
-bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, ResetInfo_t const &resetInfo)
+bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, ResetInfoLog_t const &resetInfo)
 {
 	deviceType_t newType = type;
 	if (!is_valid_device_id(device_id))

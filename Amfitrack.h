@@ -59,9 +59,12 @@ class AMFITRACK
 	bool getConfiguration(uint8_t DeviceID, bool force_all = false);
 	ConfigDiscoveryState_t getConfigurationState(uint8_t DeviceID) const;
 
-	bool requestResetInfo(uint8_t DeviceID);
+	// `RecordCount` is how many of the newest fault records to walk: 0 or 1 is the
+	// newest only, 3 the newest three. Clamped to what the device reports holding.
+	bool requestResetInfo(uint8_t DeviceID, uint8_t RecordCount = 0U);
 	ResetInfoState_t getResetInfoState(uint8_t DeviceID) const;
-	bool getResetInfo(uint8_t DeviceID, ResetInfo_t *resetInfo) const;
+	bool getResetInfoLog(uint8_t DeviceID, ResetInfoLog_t *resetInfoLog) const;
+	bool getResetInfo(uint8_t DeviceID, uint8_t RecordIndex, ResetInfo_t *resetInfo) const;
 	//-----------------------------------------------------------------------------
 	// Old function will be deprecated
 	//-----------------------------------------------------------------------------

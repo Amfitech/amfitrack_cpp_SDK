@@ -48,7 +48,7 @@ All major components are singletons with deleted copy/assignment operators:
 - **`AMFITRACK`** — public façade; delegates to all other singletons
 - **`AMFITRACK_Devices`** ([src/Amfitrack_Devices.h](src/Amfitrack_Devices.h)) — device registry; stores `AMFITRACK_Sensor` and `AMFITRACK_Source` in `unordered_map<uint8_t, ...>` keyed by device ID (0–254; 255 is broadcast). Overloaded `set()` methods update individual fields.
 - **`AMFITRACK_Config`** ([src/Amfitrack_config.h](src/Amfitrack_config.h)) — state-machine for config discovery (`CONFIG_DISCOVERY_IDLE` → `DONE`), started by `AMFITRACK::getConfiguration()`.
-- **`AMFITRACK_ResetInfo`** ([src/Amfitrack_resetinfo.h](src/Amfitrack_resetinfo.h)) — state-machine for the paged ResetInfo exchange (`RESET_INFO_IDLE` → `DONE` / `FAILED`), started by `AMFITRACK::requestResetInfo()`. Single-flight: one device at a time, and it gives up after 3 attempts rather than retrying until the device disconnects the way config discovery does.
+- **`AMFITRACK_ResetInfo`** ([src/Amfitrack_resetinfo.h](src/Amfitrack_resetinfo.h)) — state-machine for the paged ResetInfo exchange (`RESET_INFO_IDLE` → `DONE` / `FAILED`), started by `AMFITRACK::requestResetInfo(id, count)`. Walks the newest `count` records of the device's fault log, re-entering the per-record states once per record. Single-flight: one device at a time, and it gives up after 3 attempts per request rather than retrying until the device disconnects the way config discovery does. A record that will not read is skipped, not treated as the end of the log; only record 0 failing ends the walk.
 - **`amfitrack_task`** ([src/Amfitrack_task.h](src/Amfitrack_task.h)) — periodic keep-alive pings and version/name polling for connected devices
 - **`AmfiProt_API`** ([lib/amfiprotapi/lib_AmfiProt_API.hpp](lib/amfiprotapi/lib_AmfiProt_API.hpp)) — protocol layer; extends both `lib_AmfiProt` (framing/CRC) and `lib_AmfiProt_AmfiTrack` (AMFITRACK-specific message handlers). Uses two FIFOs (`outgoingBulk_FiFo`, `incomingBulk_FiFo`) for frame queuing.
 - **`HIDMonitor`** ([drv/drv_USB/HID_Monitor.h](drv/drv_USB/HID_Monitor.h)) — scans USB for AMFITRACK devices (VID `0x0C17`, sensor PID `0x0D12`, source PID `0x0D01`), handles read/write. Communicates upward via `HIDMonitorCallbacks` function objects.
@@ -67,10 +67,10 @@ Outbound: `AmfiProt_API::queue_frame()` → `HIDMonitor::drainTxQueue()` → USB
 
 ### Device Data Structs
 All types are defined in [AmfitrackDeviceTypes.h](AmfitrackDeviceTypes.h):
-- **`AMFITRACK_Sensor`** — holds `Pose_t`, `IMU_t`, `Sensor_Status_t`, `External_input_t`, raw/normalized B-field data, `DeviceConfig_t`, `ResetInfo_t`
-- **`AMFITRACK_Source`** — holds `IMU_t`, `Source_Status_t`, `Current_t`, `Voltage_t`, `Frequency_t`, `Calibration_t`, `DeviceConfig_t`, `ResetInfo_t`
+- **`AMFITRACK_Sensor`** — holds `Pose_t`, `IMU_t`, `Sensor_Status_t`, `External_input_t`, raw/normalized B-field data, `DeviceConfig_t`, `ResetInfoLog_t`
+- **`AMFITRACK_Source`** — holds `IMU_t`, `Source_Status_t`, `Current_t`, `Voltage_t`, `Frequency_t`, `Calibration_t`, `DeviceConfig_t`, `ResetInfoLog_t`
 
-`ResetInfo_t` is written only when the exchange reaches a terminal state — on `DONE`, and on `FAILED` if a summary had already arrived, so a failed exchange can still yield a record with the strings missing. Read it via `AMFITRACK::getResetInfo()`, which reports the `valid` flag rather than whether the field exists.
+`ResetInfoLog_t` holds the records a walk read, in index order (0 = newest), plus the device's own `count`. Like `DeviceConfig_t` it owns a `std::vector`, so `reset()` assigns a fresh value rather than `memset`ing it. It is written only when the walk reaches a terminal state — on `DONE`, and on `FAILED` if any record had already been assembled, so a failed walk can still yield records. Read it via `AMFITRACK::getResetInfoLog()`, or one record by index via `AMFITRACK::getResetInfo()`, which reports the `valid` flag rather than whether the field exists.
 
 ### Support Libraries (`lib/`)
 - **`lib_log`** — `Log::init(level)` sets verbosity; use `LOG_E/W/I/D(fmt, ...)` macros throughout

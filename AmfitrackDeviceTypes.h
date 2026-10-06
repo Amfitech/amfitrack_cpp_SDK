@@ -29,6 +29,13 @@
 #define AMFITRACK_RESET_INFO_MAX_CHUNKS 3
 #endif
 
+// Retained strings per record (file, func, expr). Mirrors the wire enum; see
+// kResetInfoFieldCount in Amfitrack_resetinfo.h for the static_assert tying the
+// two together.
+#ifndef AMFITRACK_RESET_INFO_FIELDS
+#define AMFITRACK_RESET_INFO_FIELDS 3
+#endif
+
 //-----------------------------------------------------------------------------
 // General enum types
 //-----------------------------------------------------------------------------
@@ -98,25 +105,40 @@ typedef struct
 //-----------------------------------------------------------------------------
 // Reset info
 //-----------------------------------------------------------------------------
-// Fault record retained across reboot, assembled from the paged ResetInfo
-// exchange. Registers are stored raw - the firmware deliberately does not
-// interpret them; see resetinfo_cfsr_to_string() for the host-side decode.
+// One fault record from the device's flash log, assembled from the paged
+// ResetInfo exchange. Registers are stored raw - the firmware deliberately does
+// not interpret them; see resetinfo_cfsr_to_string() for the host-side decode.
 typedef struct
 {
-	uint8_t resetReason;  /**< Device-specific decoded reason; not redundant with rsr */
+	uint8_t recordIndex;  /**< 0 = newest, higher indices progressively older */
+	uint8_t recordCount;  /**< Records the device reported when this one was read; saturates at 255 */
+	uint8_t resetReason;
 	uint8_t recordType;   /**< lib_AmfiProt_ResetInfoRecord_t */
-	uint32_t rsr;         /**< Raw RCC->RSR */
 	uint32_t cfsr;        /**< Hard fault only */
 	uint32_t xFAR;        /**< Hard fault only; MMARVALID/BFARVALID says which register */
 	uint32_t pc;          /**< Hard fault and assert */
 	uint32_t lr;          /**< Hard fault only */
 	uint32_t psr;         /**< Hard fault only */
 	uint32_t assertLine;  /**< Assert only */
-	char file[AMFITRACK_RESET_INFO_STRING_LENGTH];  /**< Assert only; empty when absent */
+	uint32_t fw_mmp;      /**< Build that wrote the record: major << 16 | minor << 8 | patch */
+	uint32_t fw_build;    /**< With fw_mmp, names the .elf that resolves pc and stringAddr */
+	/** file, func, expr pointer values as the faulting image saw them. They point
+	 *  into .rodata, so objdump resolves them, not addr2line. The only way to
+	 *  recover the strings of a record the running build did not write. */
+	uint32_t stringAddr[AMFITRACK_RESET_INFO_FIELDS];
+	char file[AMFITRACK_RESET_INFO_STRING_LENGTH];  /**< Assert only; empty when the record predates the running build */
 	char func[AMFITRACK_RESET_INFO_STRING_LENGTH];
 	char expr[AMFITRACK_RESET_INFO_STRING_LENGTH];
 	bool valid;           /**< False until a summary has been received */
 } ResetInfo_t;
+
+// The records a host asked for, newest first. Index 0 always answers, even on a
+// device that has never faulted, so `records` is never empty while `count` is 0.
+typedef struct
+{
+	uint8_t count;                    /**< Records the device holds, saturating at 255; not records.size() */
+	std::vector<ResetInfo_t> records; /**< In index order: records[i].recordIndex == i */
+} ResetInfoLog_t;
 
 //-----------------------------------------------------------------------------
 // Configuration
