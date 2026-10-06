@@ -656,6 +656,22 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Pose_t const &pose)
 	return true;
 }
 
+bool AMFITRACK_Devices::set(uint8_t device_id, Magneto_t const &magneto)
+{
+	if (!is_valid_device_id(device_id))
+	{
+		return false;
+	}
+
+#ifdef USE_THREAD_BASED
+	const std::lock_guard<std::mutex> lock(_mutex);
+#endif
+
+	_sensors[device_id].magneto = magneto;
+	update_last_seen(device_id, deviceType_t::Sensor);
+	return true;
+}
+
 bool AMFITRACK_Devices::set(uint8_t device_id, Raw_B_Field_t const &rawBfield)
 {
 	if (!is_valid_device_id(device_id))

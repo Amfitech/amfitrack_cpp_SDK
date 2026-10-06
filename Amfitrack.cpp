@@ -268,7 +268,7 @@ void AMFITRACK::getSensorMeasurements(uint8_t DeviceID, lib_AmfiProt_Amfitrack_S
 {
 	AMFITRACK_Sensor sensor;
 	AMFITRACK_Devices::getInstance().get_sensor_by_id(DeviceID, &sensor);
-	SensorMeasurement = &sensor.sensorMeasurement;
+	*SensorMeasurement = sensor.sensorMeasurement;
 }
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
@@ -276,6 +276,6 @@ void AMFITRACK::getSensorTimestamp(uint8_t DeviceID, std::chrono::steady_clock::
 {
 	AMFITRACK_Sensor sensor;
 	AMFITRACK_Devices::getInstance().get_sensor_by_id(DeviceID, &sensor);
-	time_stamp = &sensor.timestamp;
+	*time_stamp = sensor.timestamp;
 }
 #endif
