@@ -14,6 +14,7 @@
 #include "lib_AmfiProt_API.hpp"
 #include "lib_log.h"
 #include "Amfitrack_config.h"
+#include "Amfitrack_resetinfo.h"
 #include "Amfitrack_Devices.h"
 #include "Amfitrack_Source.h"
 #include "Amfitrack_task.h"
@@ -62,6 +63,7 @@ static void _run_all_amfitrack()
 #endif
 	amfiprot_api->amfiprot_run();
 	AMFITRACK_Config::getInstance().run();
+	AMFITRACK_ResetInfo::getInstance().run();
 	amfitrack_task::run();
 }
 
@@ -211,6 +213,26 @@ bool AMFITRACK::getConfiguration(uint8_t DeviceID, bool force_all)
 ConfigDiscoveryState_t AMFITRACK::getConfigurationState(uint8_t DeviceID) const
 {
 	return AMFITRACK_Config::getInstance().state(DeviceID);
+}
+
+bool AMFITRACK::requestResetInfo(uint8_t DeviceID, uint8_t RecordCount)
+{
+	return AMFITRACK_ResetInfo::getInstance().start(DeviceID, RecordCount);
+}
+
+ResetInfoState_t AMFITRACK::getResetInfoState(uint8_t DeviceID) const
+{
+	return AMFITRACK_ResetInfo::getInstance().state(DeviceID);
+}
+
+bool AMFITRACK::getResetInfoLog(uint8_t DeviceID, ResetInfoLog_t *resetInfoLog) const
+{
+	return AMFITRACK_ResetInfo::getInstance().get(DeviceID, resetInfoLog);
+}
+
+bool AMFITRACK::getResetInfo(uint8_t DeviceID, uint8_t RecordIndex, ResetInfo_t *resetInfo) const
+{
+	return AMFITRACK_ResetInfo::getInstance().get(DeviceID, RecordIndex, resetInfo);
 }
 
 //-----------------------------------------------------------------------------

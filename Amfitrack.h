@@ -15,6 +15,7 @@
 #include "Amfitrack_Sensor.h"
 #include "Amfitrack_Source.h"
 #include "Amfitrack_config.h"
+#include "Amfitrack_resetinfo.h"
 
 #include "lib_AmfiProt_API.hpp"
 
@@ -57,6 +58,13 @@ class AMFITRACK
 	bool setConfiguration(uint8_t DeviceID, uint32_t UID, lib_Generic_Parameter_Value_t parameter);
 	bool getConfiguration(uint8_t DeviceID, bool force_all = false);
 	ConfigDiscoveryState_t getConfigurationState(uint8_t DeviceID) const;
+
+	// `RecordCount` is how many of the newest fault records to walk: 0 or 1 is the
+	// newest only, 3 the newest three. Clamped to what the device reports holding.
+	bool requestResetInfo(uint8_t DeviceID, uint8_t RecordCount = 0U);
+	ResetInfoState_t getResetInfoState(uint8_t DeviceID) const;
+	bool getResetInfoLog(uint8_t DeviceID, ResetInfoLog_t *resetInfoLog) const;
+	bool getResetInfo(uint8_t DeviceID, uint8_t RecordIndex, ResetInfo_t *resetInfo) const;
 	//-----------------------------------------------------------------------------
 	// Old function will be deprecated
 	//-----------------------------------------------------------------------------
