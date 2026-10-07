@@ -64,6 +64,7 @@ class AMFITRACK_Sensor
 	External_input_t external_input;
 	Pose_t pose;
 	IMU_t imu;
+	Magneto_t magneto;
 	Raw_B_Field_t rawBfield;
 	Normalized_B_Field_t normBfield;
 	Raw_with_Phase_B_Field_t rawWithPhaseBfield;

@@ -84,6 +84,7 @@ class AMFITRACK_Devices
 	bool set(uint8_t device_id, Sensor_Status_t const &status);
 	bool set(uint8_t device_id, External_input_t const &ext_input);
 	bool set(uint8_t device_id, Pose_t const &pose);
+	bool set(uint8_t device_id, Magneto_t const &magneto);
 	bool set(uint8_t device_id, Raw_B_Field_t const &rawBfield);
 	bool set(uint8_t device_id, Normalized_B_Field_t const &normBfield);
 	bool set(uint8_t device_id, Raw_with_Phase_B_Field_t const &rawWithPhaseBfield);

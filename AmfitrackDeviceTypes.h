@@ -172,6 +172,13 @@ typedef struct
 
 typedef struct
 {
+	float Magneto_X; // In micro tesla
+	float Magneto_Y; // In micro tesla
+	float Magneto_Z; // In micro tesla
+} Magneto_t;
+
+typedef struct
+{
 	float bfield[9]; // In raw ADC count
 } Raw_B_Field_t;
 

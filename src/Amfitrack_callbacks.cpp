@@ -118,6 +118,11 @@ void AmfiProt_API::lib_AmfiProt_Amfitrack_handle_SensorMeasurement(void *handle,
 	imu.Rotation_Z = tempIMU.rotation_z_in_rad_per_sec;
 	AMFITRACK_Devices::getInstance().set(_deviceID, AMFITRACK_Devices::deviceType_t::Sensor, imu);
 
+	lib_AmfiProt_Amfitrack_magneto_t tempMagneto;
+	lib_AmfiProt_Amfitrack_decode_magneto_i16(&SensorMeasurement.magneto_data, &tempMagneto);
+	Magneto_t magneto = { tempMagneto.magneto_X_in_uT, tempMagneto.magneto_Y_in_uT, tempMagneto.magneto_Z_in_uT };
+	AMFITRACK_Devices::getInstance().set(_deviceID, magneto);
+
 	AMFITRACK_Devices::getInstance().set(_deviceID, SensorMeasurement);
 
 	AMFITRACK_Sensor sensor;

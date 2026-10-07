@@ -59,6 +59,7 @@ void AMFITRACK_Sensor::reset()
 	std::memset(&external_input, 0, sizeof(external_input));
 	std::memset(&pose, 0, sizeof(pose));
 	std::memset(&imu, 0, sizeof(imu));
+	std::memset(&magneto, 0, sizeof(magneto));
 	std::memset(&rawBfield, 0, sizeof(rawBfield));
 	std::memset(&normBfield, 0, sizeof(normBfield));
 	std::memset(&rawWithPhaseBfield, 0, sizeof(rawWithPhaseBfield));
