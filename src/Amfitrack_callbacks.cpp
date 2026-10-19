@@ -13,6 +13,7 @@
 #include "Amfitrack.h"
 #include "AmfitrackDeviceTypes.h"
 #include "Amfitrack_config.h"
+#include "Amfitrack_resetinfo.h"
 #include "Amfitrack_Devices.h"
 #include "lib_log.h"
 //-----------------------------------------------------------------------------
@@ -604,6 +605,68 @@ void AmfiProt_API::libAmfiProt_handle_ReplyFirmwareVersionPerID(void *handle, li
 			hw.SubVersion = FirmwareVersion.patch;
 			hw.Frequency = FirmwareVersion.build;
 			AMFITRACK_Devices::getInstance().set(_deviceID, AMFITRACK_Devices::deviceType_t::Both, hw);
+			break;
+	}
+}
+
+void AmfiProt_API::libAmfiProt_handle_RequestResetInfo(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle)
+{
+	(void)handle;
+	(void)frame;
+	(void)routing_handle;
+	/* NOTE: Overwrite in application-specific library */
+}
+
+void AmfiProt_API::libAmfiProt_handle_ReplyResetInfo(void *handle, lib_AmfiProt_Frame_t *frame, void *routing_handle)
+{
+	(void)handle;
+	(void)routing_handle;
+	uint8_t _deviceID = frame->header.source;
+
+	// Both reply shapes share payload ID 0x1F; the field byte at offset 1 says which.
+	if (frame->header.length < 2U)
+	{
+		LOG_W("ReplyResetInfo: device %u sent %u byte(s), too short to demux", _deviceID, frame->header.length);
+		return;
+	}
+
+	switch (frame->payload[1])
+	{
+		case lib_AmfiProt_ResetInfoField_Summary:
+		{
+			if (frame->header.length != sizeof(lib_AmfiProt_ResetInfoSummary_t))
+			{
+				LOG_W("ReplyResetInfo: device %u summary is %u byte(s), need %u",
+					  _deviceID, frame->header.length, (unsigned)sizeof(lib_AmfiProt_ResetInfoSummary_t));
+				return;
+			}
+
+			lib_AmfiProt_ResetInfoSummary_t resetInfoSummary;
+			memcpy(&resetInfoSummary, frame->payload, sizeof(resetInfoSummary));
+			AMFITRACK_ResetInfo::getInstance().set(_deviceID, resetInfoSummary);
+		}
+		break;
+		case lib_AmfiProt_ResetInfoField_File:
+		case lib_AmfiProt_ResetInfoField_Func:
+		case lib_AmfiProt_ResetInfoField_Expr:
+		{
+			if (frame->header.length > sizeof(lib_AmfiProt_ResetInfoChunk_t))
+			{
+				LOG_W("ReplyResetInfo: device %u chunk is %u byte(s), max %u",
+					  _deviceID, frame->header.length, (unsigned)sizeof(lib_AmfiProt_ResetInfoChunk_t));
+				return;
+			}
+
+			// The last chunk of a field is short, so copy the frame length rather
+			// than the struct size, and carry the length through: text is not
+			// NUL terminated on the wire.
+			lib_AmfiProt_ResetInfoChunk_t resetInfoChunk = {};
+			memcpy(&resetInfoChunk, frame->payload, frame->header.length);
+			AMFITRACK_ResetInfo::getInstance().set(_deviceID, resetInfoChunk, frame->header.length);
+		}
+		break;
+		default:
+			LOG_W("ReplyResetInfo: device %u sent unknown field %u", _deviceID, frame->payload[1]);
 			break;
 	}
 }
