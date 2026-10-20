@@ -76,27 +76,35 @@ endif()
 To use the Amfitrack SDK in your code:
 
 ```cpp
-#include "AmfitrackCppSDK.hpp"
+#include "Amfitrack.h"
 
 int main() {
-    /* Create instance of amfitrack */ 
-    AMFITRACK& AMFITRACK = AMFITRACK::getInstance(); 
-    /* Initializes the USB and connects to the devices */
-    AMFITRACK.initialize_amfitrack();
-    /* Starts the main thread, that read the data */
-    AMFITRACK.start_amfitrack_task();
+    /* Initialize Amfitrack system */
+    AMFITRACK::getInstance().init();
+
+    /* Start internal thread for handling USB and all packages */
+    AMFITRACK::getInstance().start_task();
 
     while (1)
     {
-        /* See if AMFITRACK Sensor device ID 2 is active */
-        if (AMFITRACK.getDeviceActive(2))
+        /* If no thread is wanted, it can in a while loop aswell*/
+        AMFITRACK::getInstance().run();
+
+        /* Get the full sensor information */
+        AMFITRACK_Sensor sensor;
+        AMFITRACK::getInstance().get_sensor(3, &sensor);
+
+        /* Get the full source information */
+        AMFITRACK_Source source;
+        AMFITRACK::getInstance().get_source(252, &source);
+
+        /* Check if the sensor request is active */
+        if (sensor.active)
         {
-            lib_AmfiProt_Amfitrack_Pose_t PoseTester;
-            /* Get the pose from AMFITRACK Sensor device ID 2 */
-            AMFITRACK.getDevicePose(2, &PoseTester);
-            printf("Pose X: %f | Y: %f | Z: %f \n", PoseTester.position_x_in_m, 
-                                                    PoseTester.position_y_in_m, 
-                                                    PoseTester.position_z_in_m
+            /* Read the pose from the sensor */
+            LOG_I("Pose X: %f | Y: %f | Z: %f \n", sensor.pose.Position_X, 
+                                                    sensor.pose.Position_Y, 
+                                                    sensor.pose.Position_Z
                                                     );
         }
     }
