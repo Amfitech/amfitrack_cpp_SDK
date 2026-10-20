@@ -278,9 +278,9 @@ void AMFITRACK::getDeviceIMU(uint8_t DeviceID, lib_AmfiProt_Amfitrack_IMU_t *imu
 {
 	AMFITRACK_Sensor sensor;
 	AMFITRACK_Devices::getInstance().get_sensor_by_id(DeviceID, &sensor);
-	imuData->acceleration_x_in_mg = sensor.imu.Acceleration_X / 1000.0f;
-	imuData->acceleration_x_in_mg = sensor.imu.Acceleration_X / 1000.0f;
-	imuData->acceleration_x_in_mg = sensor.imu.Acceleration_X / 1000.0f;
+	imuData->acceleration_x_in_mg = sensor.imu.Acceleration_X * 1000.0f;
+	imuData->acceleration_y_in_mg = sensor.imu.Acceleration_Y * 1000.0f;
+	imuData->acceleration_z_in_mg = sensor.imu.Acceleration_Z * 1000.0f;
 
 	imuData->rotation_x_in_rad_per_sec = sensor.imu.Rotation_X;
 	imuData->rotation_y_in_rad_per_sec = sensor.imu.Rotation_Y;
