@@ -89,6 +89,11 @@ class AMFITRACK_Devices
 	bool set(uint8_t device_id, Raw_B_Field_t const &rawBfield);
 	bool set(uint8_t device_id, Normalized_B_Field_t const &normBfield);
 	bool set(uint8_t device_id, Raw_with_Phase_B_Field_t const &rawWithPhaseBfield);
+	bool set_only_listen_source(uint8_t source_id);
+
+	uint8_t onlyListenSource;
+	deviceType_t device_id_exist(uint8_t device_id);
+
 	// Deprecated!
 	bool set(uint8_t device_id, lib_AmfiProt_Amfitrack_Sensor_Measurement_t const &sensorMeasurement);
 
@@ -107,7 +112,6 @@ class AMFITRACK_Devices
 
 	void update_last_seen(uint8_t device_id, deviceType_t type);
 
-	deviceType_t device_id_exist(uint8_t device_id);
 	AMFITRACK_Sensor *get_or_create_sensor(uint8_t device_id);
 	AMFITRACK_Source *get_or_create_source(uint8_t device_id);
 

@@ -100,8 +100,18 @@ void AmfiProt_API::lib_AmfiProt_Amfitrack_handle_SensorMeasurement(void *handle,
 	(void)routing_handle;
 	uint8_t _deviceID = frame->header.source;
 
+	AMFITRACK_Sensor sensor;
+	AMFITRACK_Devices::getInstance().get_sensor_by_id(_deviceID, &sensor);
+
 	lib_AmfiProt_Amfitrack_Sensor_Measurement_t SensorMeasurement;
 	memcpy(&SensorMeasurement, &frame->payload[0], sizeof(lib_AmfiProt_Amfitrack_Sensor_Measurement_t));
+
+	// Discard packets that are not broadcast / default and not the correct sourceID if we have one set
+	if (AMFITRACK_Devices::getInstance().onlyListenSource != AMFITRACK_BROADCAST_DEVICE_ID &&
+		AMFITRACK_Devices::getInstance().onlyListenSource != SensorMeasurement.source_id && 
+		SensorMeasurement.source_id != AMFITRACK_BROADCAST_DEVICE_ID) {
+		return;
+	}
 
 	lib_AmfiProt_Amfitrack_Pose_t tempPose;
 	lib_AmfiProt_Amfitrack_decode_pose_i24(&SensorMeasurement.pose, &tempPose);
@@ -125,9 +135,6 @@ void AmfiProt_API::lib_AmfiProt_Amfitrack_handle_SensorMeasurement(void *handle,
 	AMFITRACK_Devices::getInstance().set(_deviceID, magneto);
 
 	AMFITRACK_Devices::getInstance().set(_deviceID, SensorMeasurement);
-
-	AMFITRACK_Sensor sensor;
-	AMFITRACK_Devices::getInstance().get_sensor_by_id(_deviceID, &sensor);
 
 	Sensor_Status_t status = sensor.status;
 	status.RSSI = -SensorMeasurement.rssi;

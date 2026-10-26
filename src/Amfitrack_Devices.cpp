@@ -44,6 +44,8 @@ AMFITRACK_Devices &AMFITRACK_Devices::getInstance()
 
 AMFITRACK_Devices::AMFITRACK_Devices()
 {
+	// To begin with, we listen to broadcast, which means, listen to all sources.
+	onlyListenSource = AMFITRACK_BROADCAST_DEVICE_ID;
 }
 
 uint32_t AMFITRACK_Devices::device_count()
@@ -359,7 +361,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, char const *na
 		}
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -394,7 +396,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, uint32_t UUID1
 		_sources[device_id].uuid[2] = UUID3;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -425,7 +427,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, ResetInfoLog_t
 		_sources[device_id].resetInfo = resetInfo;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -456,7 +458,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, FW_t fwVersion
 		_sources[device_id].FW_Version = fwVersion;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -487,7 +489,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, RF_t rfVersion
 		_sources[device_id].RF_Version = rfVersion;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -518,7 +520,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, HW_t hwVersion
 		_sources[device_id].HW_Version = hwVersion;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -549,7 +551,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, uint8_t hubId)
 		_sources[device_id].hub_ID = hubId;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -602,7 +604,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, DeviceConfig_t
 		_sources[device_id].config = config;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -632,7 +634,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, IMU_t const &i
 		_sources[device_id].imu = imu;
 	}
 
-	update_last_seen(device_id, newType);
+	// update_last_seen(device_id, newType);
 	return true;
 }
 
@@ -648,7 +650,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Sensor_Status_t const &status)
 #endif
 
 	_sensors[device_id].status = status;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
 	return true;
 }
 
@@ -664,7 +666,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, External_input_t const &ext_input
 #endif
 
 	_sensors[device_id].external_input = ext_input;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
 	return true;
 }
 
@@ -699,7 +701,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Magneto_t const &magneto)
 #endif
 
 	_sensors[device_id].magneto = magneto;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
 	return true;
 }
 
@@ -715,7 +717,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Raw_B_Field_t const &rawBfield)
 #endif
 
 	_sensors[device_id].rawBfield = rawBfield;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
 	return true;
 }
 
@@ -731,7 +733,7 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Normalized_B_Field_t const &normB
 #endif
 
 	_sensors[device_id].normBfield = normBfield;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
 	return true;
 }
 
@@ -747,7 +749,21 @@ bool AMFITRACK_Devices::set(uint8_t device_id, Raw_with_Phase_B_Field_t const &r
 #endif
 
 	_sensors[device_id].rawWithPhaseBfield = rawWithPhaseBfield;
-	update_last_seen(device_id, deviceType_t::Sensor);
+	// update_last_seen(device_id, deviceType_t::Sensor);
+	return true;
+}
+
+bool AMFITRACK_Devices::set_only_listen_source(uint8_t source_id)
+{
+	if (!is_valid_device_id(source_id) && source_id != AMFITRACK_BROADCAST_DEVICE_ID)
+	{
+		return false;
+	}
+#ifdef USE_THREAD_BASED
+	const std::lock_guard<std::mutex> lock(_mutex);
+#endif
+
+	AMFITRACK_Devices::getInstance().onlyListenSource = source_id;
 	return true;
 }
 

@@ -157,7 +157,9 @@ void amfitrack_task::checkDisconnected()
 		const auto device_id = static_cast<uint8_t>(device_index);
 		AMFITRACK_Sensor _sensor;
 		devices.get_sensor_by_id(device_id, &_sensor);
-		if (_sensor.active && ((now - _sensor.lastTimeSeenMs) > DISCONNECT_TIMEOUT))
+
+		// Device might report as active, even if we are trying to ignore it, so actually check if it exists as well.
+		if (devices.device_id_exist(device_id) == AMFITRACK_Devices::deviceType_t::Sensor && _sensor.active && ((now - _sensor.lastTimeSeenMs) > DISCONNECT_TIMEOUT))
 		{
 			devices.set(device_id, AMFITRACK_Devices::deviceType_t::Sensor, false);
 		}
