@@ -553,6 +553,36 @@ bool AMFITRACK_Devices::set(uint8_t device_id, deviceType_t type, uint8_t hubId)
 	return true;
 }
 
+bool AMFITRACK_Devices::set_button_callback(uint8_t device_id, ButtonCallback* callback)
+{
+	if (!is_valid_device_id(device_id))
+	{
+		return false;
+	}
+
+#ifdef USE_THREAD_BASED
+	const std::lock_guard<std::mutex> lock(_mutex);
+#endif
+
+	_sensors[device_id].callback = callback;
+	return true;
+}
+
+bool AMFITRACK_Devices::set_button_state(uint8_t device_id, bool buttonDown)
+{
+	if (!is_valid_device_id(device_id))
+	{
+		return false;
+	}
+
+#ifdef USE_THREAD_BASED
+	const std::lock_guard<std::mutex> lock(_mutex);
+#endif
+
+	_sensors[device_id].buttonDown = buttonDown;
+	return true;
+}
+
 bool AMFITRACK_Devices::set_hid(uint8_t device_id, deviceType_t type, hid_device *hidHandle)
 {
 	if (!is_valid_device_id(device_id))

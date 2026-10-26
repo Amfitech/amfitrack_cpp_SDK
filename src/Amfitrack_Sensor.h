@@ -24,6 +24,11 @@
 //-----------------------------------------------------------------------------
 // Section: Typedef
 //-----------------------------------------------------------------------------
+struct ButtonCallback {
+	ButtonCallback() { instance = nullptr; function = nullptr; };
+	void* instance;
+	void (*function)(void*, bool);
+};
 
 //-----------------------------------------------------------------------------
 // Section: Macro
@@ -69,6 +74,7 @@ class AMFITRACK_Sensor
 	Raw_B_Field_t rawBfield;
 	Normalized_B_Field_t normBfield;
 	Raw_with_Phase_B_Field_t rawWithPhaseBfield;
+	bool buttonDown;
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
 	std::chrono::steady_clock::time_point timestamp;
@@ -79,4 +85,6 @@ class AMFITRACK_Sensor
 
 	// Last time a message is received from the device
 	uint32_t lastTimeSeenMs;
+
+	ButtonCallback* callback;
 };

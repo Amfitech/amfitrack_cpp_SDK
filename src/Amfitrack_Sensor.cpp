@@ -69,4 +69,6 @@ void AMFITRACK_Sensor::reset()
 #endif
 	std::memset(&sensorMeasurement, 0, sizeof(sensorMeasurement));
 	lastTimeSeenMs = 0;
+	buttonDown = false;
+	callback = nullptr;
 }

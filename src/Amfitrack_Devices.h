@@ -89,6 +89,10 @@ class AMFITRACK_Devices
 	bool set(uint8_t device_id, Raw_B_Field_t const &rawBfield);
 	bool set(uint8_t device_id, Normalized_B_Field_t const &normBfield);
 	bool set(uint8_t device_id, Raw_with_Phase_B_Field_t const &rawWithPhaseBfield);
+
+	bool set_button_callback(uint8_t device_id, ButtonCallback* callback);
+	bool set_button_state(uint8_t device_id, bool buttonDown);
+
 	// Deprecated!
 	bool set(uint8_t device_id, lib_AmfiProt_Amfitrack_Sensor_Measurement_t const &sensorMeasurement);
 
